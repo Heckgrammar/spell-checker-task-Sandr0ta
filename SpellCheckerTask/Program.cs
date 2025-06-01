@@ -1,8 +1,7 @@
-﻿using static System.Formats.Asn1.AsnWriter;
+﻿using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Threading.Tasks;
-using System;
+using System.IO;
+using System.Linq;
 
 namespace SpellCheckerTask
 {
@@ -10,39 +9,110 @@ namespace SpellCheckerTask
     {
         static void Main(string[] args)
         {
-            string[] words = createDictionary();
-            //1. Take a user input of a word an check if it has been spelled correctly
+            string[] dictionary = createDictionary();
+            HashSet<string> wordSet = new HashSet<string>(dictionary, StringComparer.OrdinalIgnoreCase);
 
-            //2. Take a string of words as a user input and check they have all been spelled correctly
+            Console.WriteLine("Enter a word or sentence:");
+            string userText = Console.ReadLine(); 
 
-            //3.Create a spelling score based on the percentage of words spelled correctly
+            string[] inputWords = userText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-            //4.Create a new list of words that have been spelled incorrectly and save it in a new file
+           
+            List<string> correctWords = new List<string>();
+            List<string> incorrectWords = new List<string>();
 
-            //Challenge - Hard task
+            foreach (string word in inputWords)
+            {
+                string normalizedWord = word.Trim().ToLower(); 
+                if (wordSet.Contains(normalizedWord))
+                    correctWords.Add(normalizedWord);
+                else
+                    incorrectWords.Add(normalizedWord);
+            }
 
-            //Try to work out which words the user is trying to spell by looking for similarities in
-            //the spelling and ask the user did they mean that.
+            
+            Console.WriteLine("\nCorrectly spelled words:");
+            Console.WriteLine(string.Join(", ", correctWords));
 
-            //Add these suggested words to a spelling list that the user can save as a file to work on
-            //their own spelling
+            Console.WriteLine("\nIncorrectly spelled words:");
+            Console.WriteLine(string.Join(", ", incorrectWords));
 
+            double score = (double)correctWords.Count / inputWords.Length * 100;
+            Console.WriteLine($"\nSpelling Score: {score:0.00}%");
 
+            
+            File.WriteAllLines("IncorrectWords.txt", incorrectWords);
+            Console.WriteLine("\nIncorrect words saved to IncorrectWords.txt");
 
+            
+            List<string> suggestions = new List<string>();
+            foreach (string wrongWord in incorrectWords)
+            {
+                string suggestion = GetClosestMatch(wrongWord, wordSet);
+                if (suggestion != null)
+                {
+                    Console.WriteLine($"Did you mean '{suggestion}' instead of '{wrongWord}'?");
+                    suggestions.Add(suggestion);
+                }
+            }
+
+            if (suggestions.Any())
+            {
+                File.WriteAllLines("SuggestionsList.txt", suggestions);
+                Console.WriteLine("\nSuggestions saved to SuggestionsList.txt");
+            }
         }
+
         static string[] createDictionary()
         {
-            using StreamReader words = new("WordsFile.txt");
-            int count = 0;
-            string[] dictionaryData = new string[178636];
-            while (!words.EndOfStream)
+            using StreamReader reader = new("WordsFile.txt");
+            List<string> words = new List<string>();
+            while (!reader.EndOfStream)
             {
-
-                dictionaryData[count] = words.ReadLine();
-                count++;
+                words.Add(reader.ReadLine());
             }
-            words.Close();
-            return dictionaryData;
+            return words.ToArray();
+        }
+
+        
+        static string GetClosestMatch(string inputWord, HashSet<string> dictionary)
+        {
+            int minDistance = int.MaxValue;
+            string closestWord = null;
+
+            foreach (string word in dictionary)
+            {
+                int distance = LevenshteinDistance(inputWord, word);
+                if (distance < minDistance && distance <= 2) // adjustable threshold
+                {
+                    minDistance = distance;
+                    closestWord = word;
+                }
+            }
+
+            return closestWord;
+        }
+
+        static int LevenshteinDistance(string a, string b)
+        {
+            int[,] dp = new int[a.Length + 1, b.Length + 1];
+
+            for (int i = 0; i <= a.Length; i++) dp[i, 0] = i;
+            for (int j = 0; j <= b.Length; j++) dp[0, j] = j;
+
+            for (int i = 1; i <= a.Length; i++)
+            {
+                for (int j = 1; j <= b.Length; j++)
+                {
+                    int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                    dp[i, j] = Math.Min(Math.Min(
+                        dp[i - 1, j] + 1,
+                        dp[i, j - 1] + 1),
+                        dp[i - 1, j - 1] + cost);
+                }
+            }
+
+            return dp[a.Length, b.Length];
         }
     }
 }
